@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#171020">
+<title>Gastos</title>
+<style>
+:root{
+  --bg:#171020; --surface:#241A2E; --surface2:#2E2239; --line:#3A2C47;
+  --lilac:#C9A7E6; --gold:#D9B45B; --rose:#E58AA0; --green:#7FC99B;
+  --text:#F3EDF8; --muted:#A895B8;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;
+  font-size:16px;min-height:100vh;padding-bottom:40px;
+  padding-top:env(safe-area-inset-top);
+  padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+button{font-family:inherit;color:inherit;background:none;border:none;font-size:inherit}
+
+/* topo */
+header{text-align:center;padding:20px 16px 8px}
+.brand{font-size:12px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold)}
+.month{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:10px}
+.month button{width:46px;height:46px;border-radius:50%;font-size:22px;color:var(--lilac)}
+.month button:active{background:rgba(201,167,230,.15)}
+.month b{font-family:Georgia,serif;font-size:19px;font-weight:600;min-width:180px;
+  padding-bottom:4px;border-bottom:1px solid var(--gold)}
+.total{padding:12px 0 4px}
+.total small{display:block;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.total strong{font-family:Georgia,serif;font-size:42px;font-weight:600;color:var(--rose)}
+
+/* linha de adicionar */
+.add{display:flex;gap:8px;padding:14px 16px 6px}
+.add input{flex:1;min-width:0;background:var(--surface2);border:1px solid var(--line);border-radius:12px;
+  min-height:50px;padding:0 14px;font-size:16px;color:var(--text);outline:none}
+.add input:focus{border-color:var(--lilac)}
+.add input.vl{flex:0 0 118px;text-align:right}
+.add button{flex:0 0 50px;height:50px;border-radius:12px;font-size:26px;font-weight:700;
+  background:linear-gradient(135deg,var(--lilac),var(--gold));color:#1A1023}
+.add button:active{transform:scale(.95)}
+
+/* planilha */
+.sheet{margin:12px 16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.row{display:flex;align-items:center;border-bottom:1px solid var(--line);min-height:52px}
+.row:last-child{border-bottom:none}
+.row .nm{flex:1;padding:0 14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .nm small{display:block;font-weight:600;font-size:11px;color:var(--muted)}
+.row .vl{padding:0 6px;font-weight:800;color:var(--rose);white-space:nowrap}
+.row .x{width:46px;height:52px;color:var(--muted);font-size:16px}
+.row.head{background:var(--surface2);min-height:38px;font-size:11px;font-weight:800;
+  letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+.row.head .vl{color:var(--muted);padding-right:52px}
+.empty{padding:26px 16px;text-align:center;color:var(--muted);font-size:14px}
+
+/* backup */
+.bk{display:flex;gap:8px;padding:4px 16px 0}
+.bk button{flex:1;min-height:44px;border-radius:12px;border:1px solid var(--line);
+  background:var(--surface);font-size:13px;font-weight:700;color:var(--muted)}
+.bk button:active{background:var(--surface2);color:var(--lilac)}
+.hint{padding:10px 16px 0;text-align:center;font-size:11px;color:var(--muted);line-height:1.5}
+
+.toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(16px);
+  background:var(--surface2);border:1px solid var(--lilac);padding:9px 18px;border-radius:22px;
+  font-weight:800;font-size:14px;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;
+  max-width:90vw;overflow:hidden;text-overflow:ellipsis}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Gastos · Dra. Camila</div>
+  <div class="month">
+    <button id="prev" aria-label="Mês anterior">‹</button><b id="mes"></b><button id="next" aria-label="Próximo mês">›</button>
+  </div>
+  <div class="total"><small>Total do mês</small><strong id="total">R$ 0,00</strong></div>
+</header>
+
+<div class="add">
+  <input id="nome" placeholder="Ex.: Cartão, Shein…" autocomplete="off">
+  <input id="valor" class="vl" inputmode="numeric" placeholder="R$ 0,00" autocomplete="off">
+  <button id="ok" aria-label="Adicionar">+</button>
+</div>
+
+<div class="sheet">
+  <div class="row head"><span class="nm">Item</span><span class="vl">Valor</span></div>
+  <div id="lista"><div class="empty">Digite o item e o valor acima e toque em +</div></div>
+</div>
+
+<div class="bk">
+  <button id="exp">↑ Exportar backup</button>
+  <button id="imp">↓ Importar backup</button>
+</div>
+<div class="hint" id="hint"></div>
+<input type="file" id="file" accept="application/json,.json" hidden>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY='gastos_camila_v1';
+let S; try{S=JSON.parse(localStorage.getItem(KEY))||{itens:[]}}catch(e){S={itens:[]}}
+if(!Array.isArray(S.itens)) S={itens:[]};
+const save=()=>localStorage.setItem(KEY,JSON.stringify(S));
+
+let y=new Date().getFullYear(), m=new Date().getMonth();
+const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const fmt=c=>(c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const mk=()=>`${y}-${String(m+1).padStart(2,'0')}`;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const nome=document.getElementById('nome'), valor=document.getElementById('valor');
+
+/* máscara de moeda */
+valor.addEventListener('input',()=>{
+  const d=valor.value.replace(/\D/g,'').slice(0,11);
+  valor.dataset.c=d||'0';
+  valor.value=d?fmt(parseInt(d)):'';
+});
+
+function toast(t){const el=document.getElementById('toast');el.textContent=t;
+  el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
+
+function render(){
+  document.getElementById('mes').textContent=`${MESES[m]} ${y}`;
+  const itens=S.itens.filter(i=>i.mes===mk());
+  const tot=itens.reduce((s,i)=>s+i.valor,0);
+  document.getElementById('total').textContent=fmt(tot);
+  const box=document.getElementById('lista');
+  if(!itens.length){box.innerHTML='<div class="empty">Digite o item e o valor acima e toque em +</div>';return}
+  box.innerHTML=itens.map(i=>`<div class="row">
+    <span class="nm">${esc(i.nome)}<small>dia ${esc(i.dia)}</small></span>
+    <span class="vl">${fmt(i.valor)}</span>
+    <button class="x" data-id="${esc(i.id)}" aria-label="Excluir">✕</button></div>`).join('');
+}
+
+function add(){
+  const n=nome.value.trim(), v=parseInt(valor.dataset.c||'0');
+  if(!n){nome.focus();return}
+  if(!v){valor.focus();return}
+  S.itens.unshift({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),nome:n,valor:v,mes:mk(),dia:String(new Date().getDate()).padStart(2,'0')+'/'+String(new Date().getMonth()+1).padStart(2,'0')});
+  save();render();
+  nome.value='';valor.value='';valor.dataset.c='0';nome.focus();
+  toast(n+' anotado ✓');
+}
+document.getElementById('ok').onclick=add;
+valor.addEventListener('keydown',e=>{if(e.key==='Enter')add()});
+nome.addEventListener('keydown',e=>{if(e.key==='Enter')valor.focus()});
+
+document.getElementById('lista').addEventListener('click',e=>{
+  const b=e.target.closest('.x');if(!b)return;
+  const item=S.itens.find(i=>i.id===b.dataset.id);
+  if(!confirm(`Excluir "${item.nome}"?`))return;
+  S.itens=S.itens.filter(i=>i.id!==b.dataset.id);save();render();
+});
+
+document.getElementById('prev').onclick=()=>{m--;if(m<0){m=11;y--}render()};
+document.getElementById('next').onclick=()=>{m++;if(m>11){m=0;y++}render()};
+
+/* ---------- BACKUP ---------- */
+const nativo = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+document.getElementById('hint').textContent = nativo
+  ? 'Aplicativo instalado · dados guardados só neste aparelho'
+  : 'Rodando no navegador · exporte antes de limpar os dados do Chrome';
+
+function nomeArquivo(){
+  const d=new Date(), p=n=>String(n).padStart(2,'0');
+  return `gastos-backup-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.json`;
+}
+
+document.getElementById('exp').onclick=async()=>{
+  if(!S.itens.length){toast('Nada para exportar ainda');return}
+  const conteudo=JSON.stringify({app:'gastos',versao:1,exportadoEm:new Date().toISOString(),itens:S.itens},null,2);
+  const arquivo=nomeArquivo();
+  if(nativo){
+    try{
+      const {Filesystem,Directory,Encoding}=window.Capacitor.Plugins;
+      await Filesystem.writeFile({path:arquivo,data:conteudo,directory:Directory.Cache,encoding:Encoding.UTF8});
+      const {uri}=await Filesystem.getUri({path:arquivo,directory:Directory.Cache});
+      await window.Capacitor.Plugins.Share.share({title:'Backup dos gastos',url:uri});
+      toast(S.itens.length+' itens exportados ✓');
+    }catch(e){toast('Não consegui exportar: '+e.message)}
+    return;
+  }
+  const blob=new Blob([conteudo],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=arquivo; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast(S.itens.length+' itens exportados ✓');
+};
+
+const file=document.getElementById('file');
+document.getElementById('imp').onclick=()=>file.click();
+file.onchange=()=>{
+  const f=file.files&&file.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const dados=JSON.parse(r.result);
+      const novos=Array.isArray(dados)?dados:dados.itens;
+      if(!Array.isArray(novos)) throw new Error('formato não reconhecido');
+      const ids=new Set(S.itens.map(i=>i.id));
+      let n=0;
+      novos.forEach(i=>{
+        if(!i||typeof i.nome!=='string'||typeof i.valor!=='number'||typeof i.mes!=='string')return;
+        if(ids.has(i.id))return;
+        ids.add(i.id); S.itens.push(i); n++;
+      });
+      S.itens.sort((a,b)=>String(b.mes).localeCompare(String(a.mes)));
+      save();render();
+      toast(n?n+' itens importados ✓':'Nada novo para importar');
+    }catch(e){toast('Arquivo inválido')}
+    file.value='';
+  };
+  r.readAsText(f);
+};
+
+render();
+</script>
+</body>
+</html>
