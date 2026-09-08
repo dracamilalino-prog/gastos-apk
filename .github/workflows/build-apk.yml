@@ -11,40 +11,71 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Localizar o projeto
+        id: proj
+        run: |
+          ARQ=$(find . -name capacitor.config.json -not -path "*/node_modules/*" -not -path "*/android/*" | head -1)
+          if [ -z "$ARQ" ]; then
+            echo "Não encontrei o capacitor.config.json no repositório."
+            exit 1
+          fi
+          DIR=$(dirname "$ARQ")
+          echo "dir=$DIR" >> $GITHUB_OUTPUT
+          echo "Projeto encontrado em: $DIR"
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - run: npm install
+      - name: Instalar dependências
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: npm install
 
-      - uses: actions/setup-java@v4
+      - name: Preparar Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      - uses: android-actions/setup-android@v3
+      - name: Preparar Android SDK
+        uses: android-actions/setup-android@v3
 
-      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Instalar plataforma do Android
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - run: npx cap sync android
+      - name: Sincronizar o app web com o projeto Android
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: npx cap sync android
 
-      - working-directory: android
+      - name: Compilar o APK
+        working-directory: ${{ steps.proj.outputs.dir }}/android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - run: cp android/app/build/outputs/apk/debug/app-debug.apk gastos.apk
+      - name: Renomear o arquivo
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk gastos.apk
 
-      - uses: actions/upload-artifact@v4
+      - name: Guardar como artefato
+        uses: actions/upload-artifact@v4
         with:
           name: gastos-apk
-          path: gastos.apk
+          path: ${{ steps.proj.outputs.dir }}/gastos.apk
 
-      - env:
+      - name: Publicar release para download direto
+        if: github.event_name != 'pull_request'
+        working-directory: ${{ steps.proj.outputs.dir }}
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release delete apk-mais-recente --yes --cleanup-tag 2>/dev/null || true
-          gh release create apk-mais-recente gastos.apk --title "Gastos — APK" --notes "Baixe o gastos.apk e instale no celular."
+          gh release create apk-mais-recente gastos.apk \
+            --title "Gastos — APK mais recente" \
+            --notes "Build automático de ${{ github.sha }}. Baixe o gastos.apk abaixo e instale no celular."
